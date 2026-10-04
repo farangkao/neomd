@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sspaeti/neomd/internal/contacts"
 )
@@ -86,7 +88,8 @@ func TestComposeSuggestions_MultiRecipientInsert(t *testing.T) {
 // Sending must persist user-typed "Name <addr>" recipients into the contacts
 // store so autocomplete knows them next time (no contacts file needed).
 func TestHarvestTypedRecipients(t *testing.T) {
-	s := contacts.Load(filepath.Join(t.TempDir(), "contacts"))
+	cachePath := filepath.Join(t.TempDir(), "contacts")
+	s := contacts.Load(cachePath)
 	m := Model{contacts: s}
 	m.harvestTypedRecipients(
 		"Max Muster <max@muster.example>, bare@x.io",
@@ -109,4 +112,18 @@ func TestHarvestTypedRecipients(t *testing.T) {
 	// Nil store: must be a no-op, not a panic.
 	nilModel := Model{}
 	nilModel.harvestTypedRecipients("A <a@b.io>")
+
+	// harvestTypedRecipients persists via safeGo(SaveIfDirty); without
+	// waiting, t.TempDir cleanup can race that goroutine and fail with
+	// "unlinkat … directory not empty" (flaky under -count/repeated runs).
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(cachePath); err == nil {
+			break
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatal("contacts cache never saved to disk")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
 }
