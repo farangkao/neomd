@@ -1,11 +1,9 @@
 package ui
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/sspaeti/neomd/internal/contacts"
 )
@@ -113,17 +111,7 @@ func TestHarvestTypedRecipients(t *testing.T) {
 	nilModel := Model{}
 	nilModel.harvestTypedRecipients("A <a@b.io>")
 
-	// harvestTypedRecipients persists via safeGo(SaveIfDirty); without
-	// waiting, t.TempDir cleanup can race that goroutine and fail with
-	// "unlinkat … directory not empty" (flaky under -count/repeated runs).
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		if _, err := os.Stat(cachePath); err == nil {
-			break
-		}
-		if !time.Now().Before(deadline) {
-			t.Fatal("contacts cache never saved to disk")
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
+	// harvestTypedRecipients persists via safeGo(SaveIfDirty) — wait for
+	// the write before TempDir cleanup runs.
+	waitForFile(t, cachePath)
 }
